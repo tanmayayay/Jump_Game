@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Basic Doodle Jump HTML Game</title>
+  <meta charset="UTF-8">
+  <style>
+  html, body {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  canvas {
+    border: 1px solid black;
+  }
+  </style>
+</head>
+<body>
+<canvas width="375" height="667" id="game"></canvas>
+<script>
+const canvas = document.getElementById('game');
+const context = canvas.getContext('2d');
+
+// width and height of each platform and where platforms start
+const platformWidth = 65;
+const platformHeight = 20;
+const platformStart = canvas.height - 50;
+
+// player physics
+const gravity = 0.33;
+const drag = 0.3;
+const bounceVelocity = -12.5;
+
+// minimum and maximum vertical space between each platform
+let minPlatformSpace = 15;
+let maxPlatformSpace = 20;
+
+// information about each platform. the first platform starts in the
+// bottom middle of the screen
+let platforms = [{
+  x: canvas.width / 2 - platformWidth / 2,
+  y: platformStart
+}];
+
+// get a random number between the min (inclusive) and max (exclusive)
+function random(min, max) {
+  return Math.random() * (max - min) + min;
+}
+
+// fill the initial screen with platforms
+let y = platformStart;
+while (y > 0) {
+  // the next platform can be placed above the previous one with a space
+  // somewhere between the min and max space
+  y -= platformHeight + random(minPlatformSpace, maxPlatformSpace);
+
+  // a platform can be placed anywhere 25px from the left edge of the canvas
+  // and 25px from the right edge of the canvas (taking into account platform
+  // width).
+  // however the first few platforms cannot be placed in the center so
+  // that the player will bounce up and down without going up the screen
+  // until they are ready to move
+  let x;
+  do {
+    x = random(25, canvas.width - 25 - platformWidth);
+  } while (
+    y > canvas.height / 2 &&
+    x > canvas.width / 2 - platformWidth * 1.5 &&
+    x < canvas.width / 2 + platformWidth / 2
+  );
+
+  platforms.push({ x, y });
+}
+
+// the doodle jumper
+const doodle = {
+  width: 40,
+  height: 40,
+  x: canvas.width / 2 - 20,
+  y: platformStart - 60,
+
+  // velocity
+  dx: 0,
+  dy: 0
+};
+
+// keep track of player direction and actions
+let playerDir = 0;
+let keydown = false;
+let prevDoodleY = doodle.y;
+
+function drawFrog(x, y, width, height) {
+  const centerX = x + width / 2;
+  const centerY = y + height / 2;
+  const bodyRadius = height * 0.35;
+  const eyeRadius = height * 0.1;
+  const legWidth = width * 0.15;
+  const legHeight = height * 0.2;
+
+  // Draw body
+  context.fillStyle = '#32CD32'; // Green color
+  context.beginPath();
+  context.arc(centerX, centerY, bodyRadius, 0, 2 * Math.PI);
+  context.fill();
+
+  // Draw eyes
+  context.fillStyle = 'white';
+  context.beginPath();
+  context.arc(centerX - bodyRadius / 2, centerY - bodyRadius / 2, eyeRadius, 0, 2 * Math.PI);
+  context.arc(centerX + bodyRadius / 2, centerY - bodyRadius / 2, eyeRadius, 0, 2 * Math.PI);
+  context.fill();
+
+  // Draw pupils
+  context.fillStyle = 'black';
+  context.beginPath();
+  context.arc(centerX - bodyRadius / 2, centerY - bodyRadius / 2, eyeRadius / 2, 0, 2 * Math.PI);
+  context.arc(centerX + bodyRadius / 2, centerY - bodyRadius / 2, eyeRadius / 2, 0, 2 * Math.PI);
+  context.fill();
+
+  // Draw legs
+  context.fillStyle = '#32CD32';
+  context.beginPath();
+  context.arc(x, y + height * 0.6, legWidth, 0, Math.PI);
+  context.arc(x + width, y + height * 0.6, legWidth, Math.PI, 2 * Math.PI);
+  context.fill();
+
+  // Draw feet
+  context.beginPath();
+  context.arc(x - legWidth / 2, y + height * 0.6 + legHeight / 2, legWidth / 2, 0, 2 * Math.PI);
+  context.arc(x + width + legWidth / 2, y + height * 0.6 + legHeight / 2, legWidth / 2, 0, 2 * Math.PI);
+  context.fill();
+}
+
+function drawLeafPlatform(x, y, width, height) {
+  // Draw the base leaf shape
+  context.fillStyle = '#228B22'; // Forest green color
+  context.beginPath();
+  context.moveTo(x, y + height);
+  context.quadraticCurveTo(x + width / 2, y - height / 2, x + width, y + height);
+  context.fill();
+
+  // Draw the 3D effect
+  const gradient = context.createLinearGradient(x, y, x + width, y);
+  gradient.addColorStop(0, 'rgba(255, 255, 255, 0.3)');
+  gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0)');
+  gradient.addColorStop(1, 'rgba(255, 255, 255, 0.3)');
+  context.fillStyle = gradient;
+  context.beginPath();
+  context.moveTo(x, y + height);
+  context.quadraticCurveTo(x + width / 2, y - height / 2, x + width, y + height);
+  context.fill();
+
+  // Draw the central vein
+  context.strokeStyle = '#006400'; // Dark green color
+  context.lineWidth = 2;
+  context.beginPath();
+  context.moveTo(x + width / 2, y - height / 2);
+  context.lineTo(x + width / 2, y + height);
+  context.stroke();
+}
+
+let score = 0;
+
+function drawScore() {
+  context.fillStyle = 'black';
+  context.font = '20px Arial';
+  context.fillText('Score: ' + score, 10, 30);
+}
+
+let prevHighestPlatformY = platformStart;
+
+
+
+// game loop
+let gameStarted = false;
+function loop() {
+  requestAnimationFrame(loop);
+  context.clearRect(0,0,canvas.width,canvas.height);
+
+  
+  // Set the background color
+context.fillStyle = '#ADD8E6'; // Light blue color
+context.fillRect(0, 0, canvas.width, canvas.height);
+
+
+  // apply gravity to doodle
+  doodle.dy += gravity;
+
+  // if doodle reaches the middle of the screen, move the platforms down
+  // instead of doodle up to make it look like doodle is going up
+  if (doodle.y < canvas.height / 2 && doodle.dy < 0) {
+    platforms.forEach(function(platform) {
+      platform.y += -doodle.dy;
+    });
+
+    // add more platforms to the top of the screen as doodle moves up
+    while (platforms[platforms.length - 1].y > 0) {
+      platforms.push({
+        x: random(25, canvas.width - 25 - platformWidth),
+        y: platforms[platforms.length - 1].y - (platformHeight + random(minPlatformSpace, maxPlatformSpace))
+      })
+
+      // add a bit to the min/max platform space as the player goes up
+      minPlatformSpace += 0.5;
+      maxPlatformSpace += 0.5;
+
+      // cap max space
+      maxPlatformSpace = Math.min(maxPlatformSpace, canvas.height / 2);
+    }
+  }
+  else {
+    doodle.y += doodle.dy;
+  }
+
+  // only apply drag to horizontal movement if key is not pressed
+  if (!keydown) {
+    if (playerDir < 0) {
+      doodle.dx += drag;
+
+      // don't let dx go above 0
+      if (doodle.dx > 0) {
+        doodle.dx = 0;
+        playerDir = 0;
+      }
+    }
+    else if (playerDir > 0) {
+      doodle.dx -= drag;
+
+      if (doodle.dx < 0) {
+        doodle.dx = 0;
+        playerDir = 0;
+      }
+    }
+  }
+
+  doodle.x += doodle.dx;
+
+  // make doodle wrap the screen
+  if (doodle.x + doodle.width < 0) {
+    doodle.x = canvas.width;
+  }
+  else if (doodle.x > canvas.width) {
+    doodle.x = -doodle.width;
+  }
+
+  // draw platforms
+  context.fillStyle = 'green';
+  platforms.forEach(function(platform) {
+    context.fillRect(platform.x, platform.y, platformWidth, platformHeight);
+
+    // make doodle jump if it collides with a platform from above
+    if (
+      // doodle is falling
+      doodle.dy > 0 &&
+
+      // doodle was previous above the platform
+      prevDoodleY + doodle.height <= platform.y &&
+
+      // doodle collides with platform
+      // (Axis Aligned Bounding Box [AABB] collision check)
+      doodle.x < platform.x + platformWidth &&
+      doodle.x + doodle.width > platform.x &&
+      doodle.y < platform.y + platformHeight &&
+      doodle.y + doodle.height > platform.y
+    ) {
+      // reset doodle position so it's on top of the platform
+      doodle.y = platform.y - doodle.height;
+      doodle.dy = bounceVelocity;
+      if (platform.y > prevHighestPlatformY) {
+  score++;
+  prevHighestPlatformY = platform.y;
+}
+    }
+  });
+
+//   // draw doodle
+//   context.fillStyle = 'red';
+//   context.fillRect(doodle.x, doodle.y, doodle.width, doodle.height);
+// Draw frog jumper
+drawFrog(doodle.x, doodle.y, doodle.width, doodle.height);
+
+drawScore();
+
+
+
+  prevDoodleY = doodle.y;
+
+  // Check if the doodle has reached a higher platform
+if (prevDoodleY > doodle.y) {
+  const newPlatform = platforms.find((platform) => {
+    return (
+      prevDoodleY + doodle.height <= platform.y &&
+      doodle.y + doodle.height > platform.y
+    );
+  });
+
+  if (newPlatform && newPlatform.y < prevHighestPlatformY) {
+    score++;
+    prevHighestPlatformY = newPlatform.y;
+  }
+}
+
+
+  // remove any platforms that have gone offscreen
+  platforms = platforms.filter(function(platform) {
+    return platform.y < canvas.height
+  });
+// check if the doodle touches the bottom of the canvas
+  if (doodle.y + doodle.height >= canvas.height) {
+    location.reload(); // refresh the page
+
+     // Set the gameStarted flag to true after the first frame of the game loop
+  gameStarted = true;
+}
+  
+}
+
+// listen to keyboard events to move doodle
+document.addEventListener('keydown', function(e) {
+  // left arrow key
+  if (e.which === 37) {
+    keydown = true;
+    playerDir = -1;
+    doodle.dx = -3;
+
+  }
+  // right arrow key
+  else if (e.which === 39) {
+    keydown = true;
+    playerDir = 1;
+    doodle.dx = 3;
+  }
+});
+
+document.addEventListener('keyup', function(e) {
+  keydown = false;
+});
+
+// start the game
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
