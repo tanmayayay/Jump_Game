@@ -341,6 +341,31 @@ document.addEventListener('keyup', function(e) {
   keydown = false;
 });
 
+// listen to touch events to move doodle
+document.addEventListener('touchstart', function(e) {
+  e.preventDefault();
+
+  // compare touchstart position (e.touches[0].clientX) with canvas.width / 2
+  // if it's less, it's on the left half of the screen, otherwise it's on the right
+  if (e.touches[0].clientX < canvas.width / 2) {
+    keydown = true;
+    playerDir = -1;
+    doodle.dx = -3;
+  } else {
+    keydown = true;
+    playerDir = 1;
+    doodle.dx = 3;
+  }
+}, {passive: false}); // not passive for iOS compatibility
+
+document.addEventListener('touchend', function(e) {
+  e.preventDefault();
+  keydown = false;
+}, {passive: false}); // not passive for iOS compatibility
+
+
+
+
 // start the game
 requestAnimationFrame(loop);
 </script>
